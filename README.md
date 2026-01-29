@@ -56,7 +56,7 @@ The seed creates:
 npm run start:dev
 ```
 
-The server listens on `PORT` (default: `3000`).
+The server listens on port 3000.
 
 ## API
 
