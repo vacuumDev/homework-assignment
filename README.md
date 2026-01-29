@@ -40,6 +40,7 @@ You can put it into a local `.env` file (not committed) or export it in your she
 
 ```bash
 npx prisma migrate dev
+npx prisma generate
 npx prisma db seed
 ```
 
