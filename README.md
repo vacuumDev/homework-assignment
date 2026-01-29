@@ -50,7 +50,7 @@ The seed creates:
 - 10 customers, each with a wallet balance
 - usage events (some already billed, some pending)
 
-### 4) Start the app
+### 4) Start the app in the dev environment
 
 ```bash
 npm run start:dev
