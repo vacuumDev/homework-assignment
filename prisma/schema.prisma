@@ -1,0 +1,65 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated/prisma"
+  moduleFormat    = "cjs"
+}
+
+datasource db {
+  provider     = "sqlite"
+}
+
+model Customer {
+  id     String  @id @default(uuid())
+  name   String
+
+  wallet Wallet?
+  usage  UsageEvent[]
+}
+
+model Wallet {
+  id           String   @id @default(uuid())
+  customerId   String   @unique
+  balanceCents Int     // cents
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  credits     WalletCredit[]
+}
+
+model WalletCredit {
+  id          String   @id @default(uuid())
+  walletId    String
+  amountCents Int
+  createdAt   DateTime @default(now())
+
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+}
+
+model Product {
+  id             String      @id @default(uuid())
+  name           String      @unique
+  unitPriceCents Int
+
+  usage          UsageEvent[]
+}
+
+model UsageEvent {
+  id              String   @id @default(uuid())
+  customerId      String
+  productId       String
+  units           Int
+  unitPriceCents  Int       // snapshot for a price if the product price changes
+  createdAt       DateTime @default(now())
+  billedAt        DateTime? // initially null but when event billed set it to DateTime when billed
+
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, billedAt, createdAt])
+  @@index([billedAt, customerId])
+  @@index([productId, createdAt])
+}
