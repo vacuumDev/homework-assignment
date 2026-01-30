@@ -7,6 +7,9 @@ Homework backend service implementing a **postpaid, usage-based billing** model 
 - Wallet balances can go negative.
 - Its homework assignment, so we use only one instance, in the real world production we need to implement lock in the database for cron to ensure only 1 instance of cron is running and prevent race-condition
 - In real world production systems we should pagination for usageEvents, products and etc.
+- In this solution we use half-ledger because we have only two entities in this solution (UsageEvent and WalletCredit) and no need to cover more cases, in real-world production systems we should use LedgerEntity table to record all wallet transactions, such as credit, debit, refund, adjustment and so on.
+- Also in the real-world production systems balance = SUM() of all transactions as explained above, so we have source of truth
+- In production add idempotency keys for Stripe/Paddle webhooks.
 
 ## Tech stack
 

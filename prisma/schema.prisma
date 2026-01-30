@@ -22,7 +22,7 @@ model Customer {
 model Wallet {
   id           String   @id @default(uuid())
   customerId   String   @unique
-  balanceCents Int     // cents
+  balanceCents Int     @default(0) // cents
 
   customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   credits     WalletCredit[]
