@@ -4,6 +4,7 @@ Homework backend service implementing a **postpaid, usage-based billing** model 
 
 - Usage events are always recorded.
 - Billing is asynchronous and performed by a cron job (runs every minute).
+- Source of truth is two tables: WalletCredit and UsageEvent
 - Wallet balances can go negative.
 - Its homework assignment, so we use only one instance, in the real world production we need to implement lock in the database for cron to ensure only 1 instance of cron is running and prevent race-condition
 - In real world production systems we should pagination for usageEvents, products and etc.
