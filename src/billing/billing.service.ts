@@ -179,8 +179,9 @@ export class BillingService {
     let totalBilled = 0;
 
     for (const { customerId } of customers) {
-      // ACID pattern for atomicity and consistency
-      const billedForCustomer = await this.prisma.$transaction(async (tx) => {
+      try {
+        // ACID pattern for atomicity and consistency
+        const billedForCustomer = await this.prisma.$transaction(async (tx) => {
         const wallet = await tx.wallet.findUnique({
           where: { customerId },
           select: { id: true },
@@ -274,6 +275,9 @@ export class BillingService {
       });
 
       totalBilled += billedForCustomer;
+      } catch (error) {
+        this.logger.error(`Failed to bill customer ${customerId}`, error);
+      }
     }
 
     return totalBilled;
