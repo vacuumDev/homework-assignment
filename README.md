@@ -54,7 +54,7 @@ npx prisma db seed
 The seed creates:
 
 - 3 products with different unit prices
-- 10 customers, each with a wallet balance (represented as a `WalletCredit` entry)
+- 10 customers with random wallet balances (1..1000 cents, represented as a `WalletCredit` entry)
 - usage events (all pending; the cron will bill them)
 
 ### 4) Start the app in the dev environment

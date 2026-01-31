@@ -15,6 +15,10 @@ type SeedCustomer = {
   name: string;
 };
 
+function randomIntInclusive(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 async function main() {
   console.log('🌱 Seeding database...');
 
@@ -40,14 +44,13 @@ async function main() {
   const customers: SeedCustomer[] = [];
 
   for (let i = 1; i <= 10; i++) {
-    const initialBalanceCents = i * 100;
+    const initialBalanceCents = randomIntInclusive(1, 1000);
 
     const customer = await prisma.$transaction(async (tx) => {
       const createdCustomer = await tx.customer.create({
         data: {
           name: `Customer ${i}`,
           wallet: {
-            // Keep aggregate balance consistent with the credit ledger.
             create: { balanceCents: 0 },
           },
         },
@@ -88,12 +91,13 @@ async function main() {
   for (const customer of customers) {
     for (let i = 0; i < 5; i++) {
       const product = products[i % products.length];
+      const units = randomIntInclusive(1, 25);
 
       await prisma.usageEvent.create({
         data: {
           customerId: customer.id,
           productId: product.id,
-          units: (i + 1) * 10,
+          units,
           unitPriceCents: product.unitPriceCents, // snapshot of a price if the product price changes
           billedAt: null, // always pending; cron is responsible for billing
         },
