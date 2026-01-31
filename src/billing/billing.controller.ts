@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   ParseUUIDPipe,
@@ -23,8 +24,11 @@ export class BillingController {
   }
 
   @Post('credit')
-  async creditWallet(@Body() dto: CreditWalletDto): Promise<CreditResultView> {
-    return this.billingService.creditWallet(dto);
+  async creditWallet(
+    @Body() dto: CreditWalletDto,
+    @Headers('idempotency-key') idempotencyKey?: string | undefined,
+  ): Promise<CreditResultView> {
+    return this.billingService.creditWallet(dto, idempotencyKey);
   }
 
   @Get('balance/:customerId')

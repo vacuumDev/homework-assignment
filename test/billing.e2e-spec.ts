@@ -1,6 +1,10 @@
 import request from 'supertest';
 import { createE2eContext, resetDatabase } from './e2e-utils';
 import { BillingService } from '../src/billing/billing.service';
+import {
+  LedgerEntryType,
+  LedgerSourceType,
+} from '../prisma/generated/prisma/client';
 
 describe('billing (e2e)', () => {
   const ctxPromise = createE2eContext('billing');
@@ -128,15 +132,127 @@ describe('billing (e2e)', () => {
 
     const res = await request(app.getHttpServer())
       .post('/billing/credit')
+      .set('Idempotency-Key', 'credit-create-1')
       .send({ customerId: customer.id, amountCents: 100 })
       .expect(201);
 
     expect(res.body).toEqual({ balanceCents: 100 });
 
-    const creditCount = await prisma.walletCredit.count({
-      where: { walletId: wallet.id, amountCents: 100 },
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { walletId: wallet.id },
+      select: { amountCents: true, entryType: true, sourceType: true },
     });
-    expect(creditCount).toBe(1);
+
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          amountCents: 100,
+          entryType: LedgerEntryType.CREDIT,
+          sourceType: LedgerSourceType.WALLET_CREDIT,
+        }),
+      ]),
+    );
+  });
+
+  it('POST /billing/credit is idempotent with Idempotency-Key', async () => {
+    const { app, prisma } = await ctxPromise;
+
+    const customer = await prisma.customer.create({
+      data: { name: 'C1', wallet: { create: { balanceCents: 0 } } },
+    });
+
+    const key = 'credit-test-1';
+
+    const res1 = await request(app.getHttpServer())
+      .post('/billing/credit')
+      .set('Idempotency-Key', key)
+      .send({ customerId: customer.id, amountCents: 100 })
+      .expect(201);
+
+    expect(res1.body).toEqual({ balanceCents: 100 });
+
+    const res2 = await request(app.getHttpServer())
+      .post('/billing/credit')
+      .set('Idempotency-Key', key)
+      .send({ customerId: customer.id, amountCents: 100 })
+      .expect(201);
+
+    expect(res2.body).toEqual({ balanceCents: 100 });
+
+    const walletId = (
+      await prisma.wallet.findUniqueOrThrow({
+        where: { customerId: customer.id },
+        select: { id: true },
+      })
+    ).id;
+
+    const credits = await prisma.ledgerEntry.findMany({
+      where: { walletId, idempotencyKey: key },
+      select: { id: true },
+    });
+    expect(credits).toHaveLength(1);
+  });
+
+  it('POST /billing/credit rejects Idempotency-Key reuse with different amount', async () => {
+    const { app, prisma } = await ctxPromise;
+
+    const customer = await prisma.customer.create({
+      data: { name: 'C1', wallet: { create: { balanceCents: 0 } } },
+    });
+
+    const key = 'credit-reuse-different-amount';
+
+    await request(app.getHttpServer())
+      .post('/billing/credit')
+      .set('Idempotency-Key', key)
+      .send({ customerId: customer.id, amountCents: 100 })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/billing/credit')
+      .set('Idempotency-Key', key)
+      .send({ customerId: customer.id, amountCents: 200 })
+      .expect(409);
+  });
+
+  it('invariant: cached wallet balance equals ledger sum', async () => {
+    const { app, prisma } = await ctxPromise;
+    const billing = app.get(BillingService);
+
+    const customer = await prisma.customer.create({
+      data: { name: 'C1', wallet: { create: { balanceCents: 0 } } },
+    });
+
+    const product = await prisma.product.create({
+      data: { name: `API Call ${customer.id}`, unitPriceCents: 50 },
+    });
+
+    await request(app.getHttpServer())
+      .post('/billing/credit')
+      .set('Idempotency-Key', 'inv-credit-1')
+      .send({ customerId: customer.id, amountCents: 1000 })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/billing/usage')
+      .send({ customerId: customer.id, productId: product.id, units: 3 })
+      .expect(201);
+
+    const billed = await billing.runBillingCron();
+    expect(billed).toBe(1);
+
+    const wallet = await prisma.wallet.findUniqueOrThrow({
+      where: { customerId: customer.id },
+      select: { id: true, balanceCents: true },
+    });
+
+    const ledgerAgg = await prisma.ledgerEntry.aggregate({
+      where: { walletId: wallet.id },
+      _sum: { amountCents: true },
+    });
+
+    const ledgerSum = ledgerAgg._sum.amountCents ?? 0;
+    expect(wallet.balanceCents).toBe(ledgerSum);
   });
 
   it('GET /billing/balance/:customerId returns 404 for missing customer', async () => {
@@ -180,6 +296,27 @@ describe('billing (e2e)', () => {
       select: { balanceCents: true },
     });
     expect(walletAfter2.balanceCents).toBe(730);
+
+    const walletId = (
+      await prisma.wallet.findUniqueOrThrow({
+        where: { customerId: customer.id },
+        select: { id: true },
+      })
+    ).id;
+
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { walletId },
+      select: { amountCents: true, entryType: true, sourceType: true },
+    });
+
+    expect(
+      entries.filter(
+        (e) =>
+          e.entryType === LedgerEntryType.DEBIT &&
+          e.sourceType === LedgerSourceType.USAGE_BILLING &&
+          e.amountCents === -270,
+      ),
+    ).toHaveLength(1);
   });
 
   it('cron allows negative wallet balances (postpaid)', async () => {

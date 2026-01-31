@@ -4,15 +4,15 @@ Homework backend service implementing a **postpaid, usage-based billing** model 
 
 - Usage events are always recorded.
 - Billing is asynchronous and performed by a cron job (runs every minute).
-- Source of truth is two tables: `WalletCredit` and `UsageEvent`.
+- Source of truth is the append-only ledger: `LedgerEntry` (with `Wallet.balanceCents` as a transactional cache).
 - Wallet balances can go negative.
 
-
-## Production notes (out of scope)
-
-- This homework assumes a single application instance and a single cron runner (SQLite). In production, cron execution should be made single-runner safe (DB locking).
-- Payment providers (Stripe/Paddle) require idempotency and robust webhook handling (event replay safety, ordering tolerance, retries).
-- For broader wallet flows (refunds/adjustments/chargebacks), a unified append-only ledger should replace the "two ledgers + aggregate" approach. We have to do LedgerEntity and append transactions there and the balance will be SUM() of all transactions 
+- **Ledger invariant**: `Wallet.balanceCents` is a cache and must always equal `SUM(LedgerEntry.amountCents)` for a wallet. This repo has an e2e test enforcing it.
+- **Idempotency**:
+  - `POST /billing/credit` supports the optional `Idempotency-Key` header. Repeating the same request with the same key returns the same result without duplicating ledger entries. Reusing a key with different parameters returns `409`.
+  - The billing cron uses deterministic idempotency keys per usage event (e.g. `usage:<usageEventId>`) to avoid duplicate debits.
+- **Cron locking**:
+  - This repo uses a simple persistent DB lock (leader election) for the cron runner.
 
 
 ## Tech stack

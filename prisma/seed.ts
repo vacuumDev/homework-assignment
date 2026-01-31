@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient } from './generated/prisma/client';
+import { LedgerEntryType, LedgerSourceType, PrismaClient } from './generated/prisma/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -23,8 +23,9 @@ async function main() {
   console.log('🌱 Seeding database...');
 
   // --- cleanup ---
-  await prisma.walletCredit.deleteMany();
+  await prisma.ledgerEntry.deleteMany();
   await prisma.usageEvent.deleteMany();
+  await prisma.cronLock.deleteMany();
   await prisma.wallet.deleteMany();
   await prisma.product.deleteMany();
   await prisma.customer.deleteMany();
@@ -68,11 +69,16 @@ async function main() {
       }
 
       if (initialBalanceCents > 0) {
-        await tx.walletCredit.create({
+        await tx.ledgerEntry.create({
           data: {
             walletId: wallet.id,
             amountCents: initialBalanceCents,
+            entryType: LedgerEntryType.CREDIT,
+            sourceType: LedgerSourceType.WALLET_CREDIT,
+            sourceId: null,
+            idempotencyKey: `seed:${createdCustomer.id}`,
           },
+          select: { id: true },
         });
 
         await tx.wallet.update({

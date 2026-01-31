@@ -11,6 +11,16 @@ datasource db {
   provider     = "sqlite"
 }
 
+enum LedgerEntryType {
+  CREDIT
+  DEBIT
+}
+
+enum LedgerSourceType {
+  WALLET_CREDIT
+  USAGE_BILLING
+}
+
 model Customer {
   id     String  @id @default(uuid())
   name   String
@@ -22,21 +32,27 @@ model Customer {
 model Wallet {
   id           String   @id @default(uuid())
   customerId   String   @unique
-  balanceCents Int     @default(0) // cents
-
+  balanceCents Int     @default(0) // cents, cache, maintained transactionally with ledger
   customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  credits     WalletCredit[]
+  ledger      LedgerEntry[]
 }
 
-model WalletCredit {
+model LedgerEntry {
   id          String   @id @default(uuid())
   walletId    String
-  amountCents Int
+  amountCents Int // signed; credit=+, debit=-
+  currency    String   @default("USD")
+  entryType   LedgerEntryType
+  sourceType  LedgerSourceType
+  sourceId    String?
+  idempotencyKey String?
   createdAt   DateTime @default(now())
 
   wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@index([walletId, createdAt])
+  @@index([walletId, sourceType, sourceId])
+  @@unique([walletId, idempotencyKey])
 }
 
 model Product {
@@ -62,4 +78,10 @@ model UsageEvent {
   @@index([customerId, billedAt, createdAt])
   @@index([billedAt, customerId])
   @@index([productId, createdAt])
+}
+
+model CronLock {
+  name        String   @id
+  lockedBy    String
+  updatedAt   DateTime @updatedAt
 }

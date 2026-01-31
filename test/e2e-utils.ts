@@ -50,8 +50,9 @@ export async function createE2eContext(testName: string): Promise<E2eContext> {
 
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
   // cleanup database
-  await prisma.walletCredit.deleteMany();
+  await prisma.ledgerEntry.deleteMany();
   await prisma.usageEvent.deleteMany();
+  await prisma.cronLock.deleteMany();
   await prisma.wallet.deleteMany();
   await prisma.product.deleteMany();
   await prisma.customer.deleteMany();
