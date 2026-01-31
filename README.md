@@ -4,13 +4,16 @@ Homework backend service implementing a **postpaid, usage-based billing** model 
 
 - Usage events are always recorded.
 - Billing is asynchronous and performed by a cron job (runs every minute).
-- Source of truth is two tables: WalletCredit and UsageEvent
+- Source of truth is two tables: `WalletCredit` and `UsageEvent`.
 - Wallet balances can go negative.
-- Its homework assignment, so we use only one instance, in the real world production we need to implement lock in the database for cron to ensure only 1 instance of cron is running and prevent race-condition
-- In real world production systems we should pagination for usageEvents, products and etc.
-- In this solution we use half-ledger because we have only two entities in this solution (UsageEvent and WalletCredit) and no need to cover more cases, in real-world production systems we should use LedgerEntity table to record all wallet transactions, such as credit, debit, refund, adjustment and so on.
-- Also in the real-world production systems balance = SUM() of all transactions as explained above, so we have source of truth
-- In production add idempotency keys for Stripe/Paddle webhooks.
+
+
+## Production notes (out of scope)
+
+- This homework assumes a single application instance and a single cron runner (SQLite). In production, cron execution should be made single-runner safe (DB locking).
+- Payment providers (Stripe/Paddle) require idempotency and robust webhook handling (event replay safety, ordering tolerance, retries).
+- For broader wallet flows (refunds/adjustments/chargebacks), a unified append-only ledger should replace the "two ledgers + aggregate" approach. We have to do LedgerEntity and append transactions there and the balance will be SUM() of all transactions 
+
 
 ## Tech stack
 
@@ -51,8 +54,8 @@ npx prisma db seed
 The seed creates:
 
 - 3 products with different unit prices
-- 10 customers, each with a wallet balance
-- usage events (some already billed, some pending)
+- 10 customers, each with a wallet balance (represented as a `WalletCredit` entry)
+- usage events (all pending; the cron will bill them)
 
 ### 4) Start the app in the dev environment
 

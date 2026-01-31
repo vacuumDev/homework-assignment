@@ -40,15 +40,45 @@ async function main() {
   const customers: SeedCustomer[] = [];
 
   for (let i = 1; i <= 10; i++) {
-    const customer = await prisma.customer.create({
-      data: {
-        name: `Customer ${i}`,
-        wallet: {
-          create: {
-            balanceCents: i * 100,
+    const initialBalanceCents = i * 100;
+
+    const customer = await prisma.$transaction(async (tx) => {
+      const createdCustomer = await tx.customer.create({
+        data: {
+          name: `Customer ${i}`,
+          wallet: {
+            // Keep aggregate balance consistent with the credit ledger.
+            create: { balanceCents: 0 },
           },
         },
-      },
+      });
+
+      const wallet = await tx.wallet.findUnique({
+        where: { customerId: createdCustomer.id },
+        select: { id: true },
+      });
+
+      if (!wallet) {
+        throw new Error(
+          `Wallet not found right after creation for customerId=${createdCustomer.id}`,
+        );
+      }
+
+      if (initialBalanceCents > 0) {
+        await tx.walletCredit.create({
+          data: {
+            walletId: wallet.id,
+            amountCents: initialBalanceCents,
+          },
+        });
+
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balanceCents: { increment: initialBalanceCents } },
+        });
+      }
+
+      return createdCustomer;
     });
 
     customers.push(customer);
@@ -65,7 +95,7 @@ async function main() {
           productId: product.id,
           units: (i + 1) * 10,
           unitPriceCents: product.unitPriceCents, // snapshot of a price if the product price changes
-          billedAt: i < 2 ? new Date() : null, // part is already billed, part is pending
+          billedAt: null, // always pending; cron is responsible for billing
         },
       });
     }
